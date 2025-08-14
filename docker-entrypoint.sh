@@ -49,31 +49,21 @@ else
 fi
 
 echo "Checking database status..."
-MIGRATE_STATUS=$(php artisan migrate:status 2>/dev/null || echo "NO_MIGRATIONS")
-if [[ "$MIGRATE_STATUS" == "NO_MIGRATIONS" ]] || ! echo "$MIGRATE_STATUS" | grep -q "| Y |"; then
-    echo "Setting up database with fresh migrations..."
+set +e
+php artisan migrate:status >/dev/null 2>&1
+DB_CHECK_EXIT=$?
+set -e
+
+if [ "$DB_CHECK_EXIT" -ne 0 ]; then
+    # migrations table does not exist → fresh database
+    echo "Fresh database detected. Running migrate:fresh..."
     php artisan migrate:fresh --force --no-interaction
-    if [ $? -eq 0 ]; then
-        echo "Database migrations completed successfully!"
-        echo "Seeding database with test data..."
-        php artisan db:seed --force --no-interaction
-        if [ $? -eq 0 ]; then
-            echo "Database seeding completed successfully!"
-        else
-            echo "Warning: Database seeding failed, but continuing..."
-        fi
-    else
-        echo "Error: Database migration failed!"
-        exit 1
-    fi
+    echo "Seeding database..."
+    php artisan db:seed --force --no-interaction
 else
-    echo "Database already exists, checking for pending migrations..."
+    # migrations table exists → only apply pending migrations
+    echo "Existing database detected. Checking for pending migrations..."
     php artisan migrate --force --no-interaction
-    if [ $? -eq 0 ]; then
-        echo "Pending migrations applied successfully!"
-    else
-        echo "Warning: Migration check failed, but continuing..."
-    fi
 fi
 
 echo "Clearing application cache..."
